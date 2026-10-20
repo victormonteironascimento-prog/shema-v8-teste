@@ -23,6 +23,7 @@ main{max-width:780px;margin:auto;padding:18px}.screen{display:none}.screen.activ
 @media(max-width:420px){.nav button{font-size:9px}.nav span{font-size:18px}}
 
 .ph-options{display:grid;gap:9px;margin:12px 0}.ph-options button{padding:12px;text-align:left;border-radius:12px;border:1px solid #55432d;background:#17130f;color:var(--txt);font:inherit}.ph-options button.good{border-color:#6e9e70;background:#18251a}.ph-options button.bad{border-color:#a85b51;background:#2a1715}
+#shemaXpReward{position:fixed;top:22%;left:50%;z-index:100000;transform:translate(-50%,-8px) scale(.8);opacity:0;pointer-events:none;background:linear-gradient(135deg,#f2cf80,#d9aa50);color:#201506;border:2px solid #fff0c6;border-radius:22px;padding:18px 30px;font-weight:900;font-size:26px;box-shadow:0 12px 50px #000a;transition:opacity .25s,transform .35s}#shemaXpReward.visible{opacity:1;transform:translate(-50%,0) scale(1)}
 </style>
 </head>
 <body>
@@ -73,6 +74,11 @@ main{max-width:780px;margin:auto;padding:18px}.screen{display:none}.screen.activ
 <div class="muted" id="bibleStatus" style="margin-top:12px">Escolha um livro e capítulo.</div></div>
 <div class="card" id="bibleText"><p>O texto bíblico aparecerá aqui.</p></div>
 <div id="shemaDailyReadingReturn" class="card" style="display:none"><p>Terminou a leitura de Salmo 23? Volte à missão para registrar a conclusão e continuar a reflexão.</p><button class="btn" type="button" onclick="completePsalm23Reading()">✓ Concluir leitura e continuar →</button><button class="btn secondary" type="button" onclick="go('quest')">Voltar à missão sem concluir</button></div>
+<div class="card" id="shemaReaderNavigation">
+<p id="shemaReaderContext" class="muted">Leitura livre: continue para o próximo capítulo ou retorne ao início.</p>
+<button class="btn" type="button" onclick="shemaReaderNext()">📖 Continuar leitura →</button>
+<button class="btn secondary" type="button" onclick="shemaReaderBack()">← Voltar</button>
+</div>
 <p class="muted">Versão: Bíblia Livre (Almeida 1819). Fonte dos dados: projeto aberto Midvash Bible Data. O download completo precisa de internet e espaço livre neste aparelho; depois os capítulos ficam disponíveis offline neste mesmo navegador/aparelho.</p>
 </section>
 
@@ -94,10 +100,11 @@ main{max-width:780px;margin:auto;padding:18px}.screen{display:none}.screen.activ
 <script>
 let xp=Number(localStorage.shemaXP??460),steps=JSON.parse(localStorage.shemaSteps||'[false,false,false,false]'),answered=false,avatar=localStorage.shemaAvatar||'🧭';
 document.getElementById('profileName').textContent=localStorage.shemaName||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;
-function go(id){if(id==='bible'){const ret=document.getElementById('shemaDailyReadingReturn');if(ret)ret.style.display='none';}if(id==='profile'&&typeof refreshAccountProfile==='function')refreshAccountProfile();document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.s===id));scrollTo({top:0,behavior:'smooth'})}
+function go(id){if(id==='bible'&&!window.shemaReadingFromMission){const ret=document.getElementById('shemaDailyReadingReturn');if(ret)ret.style.display='none';}if(id==='profile'&&typeof refreshAccountProfile==='function')refreshAccountProfile();document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.s===id));scrollTo({top:0,behavior:'smooth'})}
 let shemaToastTimer;function toast(t){let e=document.getElementById('toast');if(!e)return;clearTimeout(shemaToastTimer);e.textContent=t;e.classList.remove('show');void e.offsetWidth;e.classList.add('show');shemaToastTimer=setTimeout(()=>e.classList.remove('show'),3000)}
 function save(){localStorage.shemaXP=xp;localStorage.shemaSteps=JSON.stringify(steps)}
-function addXP(n){xp+=n;save();document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';refreshAccountProfile();toast('+'+n+' XP ✨')}
+function shemaRewardAnimation(n){const old=document.getElementById('shemaXpReward');if(old)old.remove();const el=document.createElement('div');el.id='shemaXpReward';el.textContent='✨ +'+n+' XP';el.setAttribute('role','status');document.body.appendChild(el);requestAnimationFrame(()=>el.classList.add('visible'));setTimeout(()=>{el.classList.remove('visible');setTimeout(()=>el.remove(),450)},2600);}
+function addXP(n){xp+=n;save();shemaRewardAnimation(n);document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';refreshAccountProfile();toast('+'+n+' XP ✨')}
 function update(){document.getElementById('daily').textContent=steps.filter(Boolean).length+'/4';if(steps.filter(Boolean).length>=3)document.getElementById('finish').style.display='block'}
 function step(i){if(!steps[i]){steps[i]=true;addXP([50,40,30,50][i])}update()}
 function answer(el,ok){if(answered)return;answered=true;el.classList.add(ok?'ok':'bad');if(ok){steps[2]=true;addXP(30);toast('Resposta correta!')}else toast('Volte ao texto e tente novamente.');update();save()}
@@ -234,8 +241,10 @@ async function loadBibleChapter(){
  try{const r=await fetch('https://api.midvash.com/v1/almeida-livre/'+b[1]+'/'+ch);if(!r.ok)throw Error('API '+r.status);const j=await r.json(),verses=bibleVerseList(j);if(!verses.length)throw Error('Capítulo vazio');await putBibleCache(key,{verses:verses,version:'Bíblia Livre (Almeida 1819)'});renderBibleChapter(b,ch,verses,'network');}
  catch(e){if(cached&&Array.isArray(cached.verses)&&cached.verses.some(v=>v&&v.text)){status.textContent='Fonte indisponível · exibindo cópia salva offline';}else{status.textContent='Não foi possível carregar o texto bíblico.';out.innerHTML='<p>'+(e&&e.message?escapeBibleText(e.message):'Confira a conexão e tente novamente.')+'</p><button class="btn" onclick="preloadFullBible()">Preparar Bíblia completa</button><button class="btn secondary" onclick="loadBibleChapter()">Tentar capítulo novamente</button>';}}
 }
-function openPsalm23(){initBibleReader();document.getElementById('bibleBook').value='18';updateBibleChapters();document.getElementById('bibleChapter').value='23';go('bible');document.getElementById('shemaDailyReadingReturn').style.display='block';loadBibleChapter();}
-function completePsalm23Reading(){const first=!steps[0];step(0);document.getElementById('shemaDailyReadingReturn').style.display='none';go('quest');if(!first)toast('Leitura já concluída ✓ Continue para a reflexão.');}
+function openPsalm23(){window.shemaReadingFromMission='quest';initBibleReader();document.getElementById('bibleBook').value='18';updateBibleChapters();document.getElementById('bibleChapter').value='23';go('bible');document.getElementById('shemaDailyReadingReturn').style.display='block';loadBibleChapter();}
+function shemaReaderBack(){const origin=window.shemaReadingFromMission;window.shemaReadingFromMission=null;const r=document.getElementById('shemaDailyReadingReturn');if(r)r.style.display='none';go(origin==='playhouse'?'playhouse':origin==='quest'?'quest':'home');}
+function shemaReaderNext(){initBibleReader();const book=document.getElementById('bibleBook'),chapter=document.getElementById('bibleChapter');if(!book||!chapter)return;const max=chapter.options.length;const n=Number(chapter.value);if(n<max){chapter.value=String(n+1);}else if(Number(book.value)<bibleBooks.length-1){book.value=String(Number(book.value)+1);updateBibleChapters();chapter.value='1';}else{toast('Você chegou ao último capítulo da Bíblia.');return;}const r=document.getElementById('shemaDailyReadingReturn');if(r)r.style.display='none';window.shemaReadingFromMission=null;loadBibleChapter();go('bible');}
+function completePsalm23Reading(){const first=!steps[0];step(0);window.shemaReadingFromMission=null;document.getElementById('shemaDailyReadingReturn').style.display='none';go('quest');if(!first)toast('Leitura já concluída ✓ Continue para a reflexão.');}
 function finishFour(){if(!steps[3]){steps[3]=true;addXP(50)}update();document.getElementById('nextHouse').style.display='block';localStorage.shemaTask4Done='1';toast('Tarefa 4 concluída! ⚔️');saveProgress();}
 function advanceHouse(){let p=phProgress();p[0]=p[1]=p[2]=p[3]=true;localStorage.setItem('shemaPlayable',JSON.stringify(p));localStorage.shemaHouse='5';phMapUpdate();toast('Casa 5 desbloqueada! 👤');go('map');saveProgress();}
 function saveProgress(){localStorage.shemaXP=xp;localStorage.shemaSteps=JSON.stringify(steps);}
@@ -381,7 +390,7 @@ function phMapRender(){
 }
 function phMapUpdate(){let p=phProgress(),un=phUnlocked();for(let i=1;i<=PH.length;i++){let e=document.getElementById('mapHouse'+i);if(e){e.classList.remove('done','current','locked');if(p[i-1])e.classList.add('done');else if(i<=un)e.classList.add('current');else e.classList.add('locked');let c=e.querySelector('.circle');if(c)c.textContent=p[i-1]?'✓':String(i)}}let done=p.filter(Boolean).length,x=document.getElementById('mapProgress');if(x)x.textContent=done+' / '+PH.length;let bar=document.querySelector('#map .bar i');if(bar)bar.style.width=(done/PH.length*100)+'%';let r=REGION_INFO.find(z=>un>=z.start&&un<=z.end)||REGION_INFO[REGION_INFO.length-1],rp=document.getElementById('regionProgress');if(rp)rp.textContent='Região atual: '+r.title+' · casas '+r.start+'–'+r.end;}
 
-function phRead(){let d=PH[phN-1],bookIndex=bibleBooks.findIndex(x=>x[1]===d[10]);go('bible');let b=document.getElementById('bibleBook');if(b&&bookIndex>=0){b.value=String(bookIndex);if(typeof updateBibleChapters==='function')updateBibleChapters();let c=document.getElementById('bibleChapter');if(c)c.value=String(d[11]);if(typeof loadBibleChapter==='function')loadBibleChapter()}}
+function phRead(){window.shemaReadingFromMission='playhouse';let d=PH[phN-1],bookIndex=bibleBooks.findIndex(x=>x[1]===d[10]);go('bible');let b=document.getElementById('bibleBook');if(b&&bookIndex>=0){b.value=String(bookIndex);if(typeof updateBibleChapters==='function')updateBibleChapters();let c=document.getElementById('bibleChapter');if(c)c.value=String(d[11]);if(typeof loadBibleChapter==='function')loadBibleChapter()}}
 </script>
 
 <!-- SHEMA V8: autenticação e sincronização de progresso -->
