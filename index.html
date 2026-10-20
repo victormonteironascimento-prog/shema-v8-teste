@@ -28,7 +28,7 @@ main{max-width:780px;margin:auto;padding:18px}.screen{display:none}.screen.activ
 </head>
 <body>
 <div class="app">
-<header><div class="head"><div class="brand"><div class="mark">✦</div><div>SHEMA<div class="tiny">JORNADA DA PALAVRA</div></div></div><div class="streak" title="Sequência ainda não monitorada por conta nesta versão">🔥 Sequência em preparação</div></div></header>
+<header><div class="head"><div class="brand"><div class="mark">✦</div><div>SHEMA<div class="tiny">JORNADA DA PALAVRA</div></div></div><div class="streak" id="shemaStreak" title="Dias consecutivos em que você entrou no Shema">🔥 —</div></div></header>
 <main>
 <section id="home" class="screen active">
 <div class="card hero"><div class="row"><div><div class="ey">Sua jornada</div><h1 id="heroTitle">O Chamado</h1><div class="muted">Nível <b id="level">4</b> · <span id="xp">460</span> XP</div></div><div class="avatar" id="avatarHome">🧭</div></div><div class="bar" style="margin-top:15px"><i id="xpbar" style="width:66%"></i></div><button class="btn" onclick="go('quest')">Continuar jornada →</button></div>
@@ -421,31 +421,61 @@ const email=document.getElementById('authEmail'),password=document.getElementByI
 const submit=document.getElementById('authSubmit'),sw=document.getElementById('authSwitch'),forgot=document.getElementById('authForgot');
 const emailGroup=document.getElementById('authEmailGroup'),pwGroup=document.getElementById('authPasswordGroup');
 let mode='login',client=null,currentUser=null,syncTimer=null,syncing=false,loadedUser=null,localOwner=null,suppressSync=false,sessionEpoch=0;
-const PROGRESS_KEYS=['shemaXP','shemaSteps','shemaAvatar','shemaName','shemaPlayable','shemaHouse','shemaTask4Done'];
+const PROGRESS_KEYS=['shemaXP','shemaSteps','shemaAvatar','shemaName','shemaPlayable','shemaHouse','shemaTask4Done','shemaStreakCount','shemaStreakLastDate'];
 const NOTE_PREFIX='shemaNote';
 if(app)app.inert=true;
 function message(s){msg.textContent=s||'';}
 function errText(e){const s=String(e&&e.message||'');if(/invalid login credentials/i.test(s))return 'E-mail ou senha incorretos, ou conta não confirmada.';if(/email not confirmed/i.test(s))return 'Confirme seu e-mail antes de entrar.';if(/rate limit|too many requests/i.test(s))return 'Muitas tentativas. Aguarde e tente novamente.';if(/password/i.test(s))return 'Verifique sua senha (mínimo de 8 caracteres).';return 'Falha: '+(s||'verifique sua conexão.');}
 function setMode(next){mode=next;message('');form.reset();emailGroup.hidden=next==='update';pwGroup.hidden=next==='reset';email.required=next!=='update';password.required=next!=='reset';password.autocomplete=(next==='signup'||next==='update')?'new-password':'current-password';document.getElementById('authTitle').textContent=next==='signup'?'Criar conta':next==='reset'?'Recuperar senha':next==='update'?'Nova senha':'✦ SHEMA V8';document.getElementById('authSubtitle').textContent=next==='signup'?'Confirme o e-mail após cadastrar.':next==='reset'?'Enviaremos um link de recuperação.':next==='update'?'Escolha uma nova senha.':'Entre para continuar sua Jornada da Palavra.';submit.textContent=next==='signup'?'Cadastrar':next==='reset'?'Enviar link':next==='update'?'Salvar senha':'Entrar';sw.textContent=next==='login'?'Criar conta':'Voltar para entrar';forgot.hidden=next==='reset'||next==='update';}
 function setStatus(s){const el=document.getElementById('shemaSyncStatus');if(el)el.textContent=s;}
+// Acesso diário por conta. Data civil no fuso de Brasília (America/Sao_Paulo).
+function shemaBrazilDate(){
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const get=k=>parts.find(p=>p.type===k).value;
+  return get('year')+'-'+get('month')+'-'+get('day');
+}
+function shemaPreviousDate(day){
+  const d=new Date(day+'T12:00:00Z');
+  if(Number.isNaN(d.getTime()))return '';
+  d.setUTCDate(d.getUTCDate()-1);
+  return d.toISOString().slice(0,10);
+}
+function shemaRenderStreak(){
+  const el=document.getElementById('shemaStreak');if(!el)return;
+  const count=Math.max(0,Number(localStorage.getItem('shemaStreakCount'))||0);
+  el.textContent='🔥 '+count+' '+(count===1?'dia':'dias');
+}
+function shemaRecordDailyVisit(){
+  if(!currentUser||loadedUser!==currentUser.id)return;
+  const today=shemaBrazilDate();
+  const last=localStorage.getItem('shemaStreakLastDate');
+  if(last===today){shemaRenderStreak();return;}
+  const previous=shemaPreviousDate(today);
+  const old=Math.max(0,Number(localStorage.getItem('shemaStreakCount'))||0);
+  const count=(last===previous&&old>0)?old+1:1;
+  localStorage.setItem('shemaStreakCount',String(count));
+  localStorage.setItem('shemaStreakLastDate',today);
+  shemaRenderStreak();
+  queuePush();
+}
 function capture(){const data={};for(const k of PROGRESS_KEYS){const v=localStorage.getItem(k);if(v!==null)data[k]=v;}for(let i=1;i<=83;i++){const v=localStorage.getItem(NOTE_PREFIX+i);if(v!==null)data[NOTE_PREFIX+i]=v;}return {schema:1,saved_at:new Date().toISOString(),values:data};}
 function restore(data){if(!data||data.schema!==1||!data.values||typeof data.values!=='object')throw Error('Formato do progresso inválido.');const old=suppressSync;suppressSync=true;try{for(const [k,v] of Object.entries(data.values)){if((PROGRESS_KEYS.includes(k)||/^shemaNote(?:[1-9]|[1-7][0-9]|8[0-3])$/.test(k))&&typeof v==='string')localStorage.setItem(k,v);}refreshUI();}finally{suppressSync=old;}}
 function clearJourney(){const old=suppressSync;suppressSync=true;try{for(const k of PROGRESS_KEYS)localStorage.removeItem(k);for(let i=1;i<=83;i++)localStorage.removeItem(NOTE_PREFIX+i);localStorage.setItem('shemaXP','0');localStorage.setItem('shemaSteps','[false,false,false,false]');localStorage.setItem('shemaPlayable','[]');localStorage.setItem('shemaHouse','1');}finally{suppressSync=old;}}
 function archiveCurrent(owner){if(owner){localStorage.setItem('shemaV8AccountBackup:'+owner,JSON.stringify(capture()));}else if(!localStorage.getItem('shemaV8LegacyBackup')){localStorage.setItem('shemaV8LegacyBackup',JSON.stringify(capture()));}}
 function restoreAccountBackup(uid){try{const d=JSON.parse(localStorage.getItem('shemaV8AccountBackup:'+uid)||'null');if(d){clearJourney();restore(d);return true;}}catch(e){console.warn(e);}return false;}
 function refreshAccountProfile(){const level=Math.floor(Math.max(0,xp)/175)+1;const profileLevel=document.getElementById('profileLevel');if(profileLevel)profileLevel.textContent='Nível '+level+' · O Chamado';const apprentice=document.getElementById('shemaApprentice');if(apprentice)apprentice.hidden=xp<175;}
-function refreshUI(){try{xp=Number(localStorage.getItem('shemaXP')??0);steps=JSON.parse(localStorage.getItem('shemaSteps')||'[false,false,false,false]');avatar=localStorage.getItem('shemaAvatar')||'🧭';document.getElementById('profileName').textContent=localStorage.getItem('shemaName')||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';update();phMapUpdate();restoreProgress();refreshAccountProfile();}catch(e){console.warn('Shema: atualização da interface',e);}}
+function refreshUI(){try{xp=Number(localStorage.getItem('shemaXP')??0);steps=JSON.parse(localStorage.getItem('shemaSteps')||'[false,false,false,false]');avatar=localStorage.getItem('shemaAvatar')||'🧭';document.getElementById('profileName').textContent=localStorage.getItem('shemaName')||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';update();phMapUpdate();restoreProgress();refreshAccountProfile();shemaRenderStreak();}catch(e){console.warn('Shema: atualização da interface',e);}}
 async function pull(){const {data,error}=await client.from('user_progress').select('progress_data').eq('user_id',currentUser.id).maybeSingle();if(error)throw error;return data&&data.progress_data||null;}
 async function push(){if(!currentUser||syncing||suppressSync||loadedUser!==currentUser.id)return;const owner=currentUser.id,epoch=sessionEpoch,payload=capture();syncing=true;setStatus('Salvando progresso na nuvem…');try{const {error}=await client.from('user_progress').upsert({user_id:owner,progress_data:payload},{onConflict:'user_id'});if(error)throw error;if(epoch===sessionEpoch&&currentUser?.id===owner)setStatus('✓ Progresso salvo na nuvem · '+new Date().toLocaleTimeString('pt-BR'));}catch(e){if(epoch===sessionEpoch)setStatus('Não foi possível sincronizar: '+errText(e));}finally{syncing=false;}}
 function queuePush(){if(suppressSync||!currentUser||loadedUser!==currentUser.id)return;clearTimeout(syncTimer);const epoch=sessionEpoch;syncTimer=setTimeout(()=>{if(epoch===sessionEpoch)push();},1300);}
 function showApp(yes){box.hidden=!!yes;if(app)app.inert=!yes;document.getElementById('shemaLogout').style.display=yes?'inline-block':'none';}
-async function initialize(session){const user=session&&session.user;if(!user){sessionEpoch++;clearTimeout(syncTimer);currentUser=null;loadedUser=null;showApp(false);return;}if(loadedUser===user.id){showApp(true);return;}sessionEpoch++;clearTimeout(syncTimer);const epoch=sessionEpoch;const previousOwner=localStorage.getItem('shemaV8LocalOwner');currentUser=user;loadedUser=null;showApp(false);message('Carregando sua jornada…');try{const cloud=await pull();if(epoch!==sessionEpoch||currentUser?.id!==user.id)return;
+async function initialize(session){const user=session&&session.user;if(!user){sessionEpoch++;clearTimeout(syncTimer);currentUser=null;loadedUser=null;showApp(false);return;}if(loadedUser===user.id){showApp(true);shemaRecordDailyVisit();return;}sessionEpoch++;clearTimeout(syncTimer);const epoch=sessionEpoch;const previousOwner=localStorage.getItem('shemaV8LocalOwner');currentUser=user;loadedUser=null;showApp(false);message('Carregando sua jornada…');try{const cloud=await pull();if(epoch!==sessionEpoch||currentUser?.id!==user.id)return;
 if(previousOwner!==user.id){archiveCurrent(previousOwner);clearJourney();}
 if(cloud){clearJourney();restore(cloud);setStatus('✓ Progresso recuperado da nuvem.');}
 else if(previousOwner===user.id){setStatus('Sua jornada local está disponível. Salve-a na nuvem.');}
 else if(restoreAccountBackup(user.id)){setStatus('Jornada deste usuário recuperada do backup local.');}
 else{refreshUI();setStatus('Conta sem progresso. Você pode começar do zero ou importar uma jornada antiga.');}
-localStorage.setItem('shemaV8LocalOwner',user.id);loadedUser=user.id;message('');showApp(true);
+localStorage.setItem('shemaV8LocalOwner',user.id);loadedUser=user.id;message('');showApp(true);shemaRecordDailyVisit();
 }catch(e){message('Não foi possível verificar o progresso: '+errText(e)+' Tente recarregar.');showApp(false);}}
 
 if(!window.supabase?.createClient){message('Serviço de login indisponível. Conecte-se à internet e recarregue.');submit.disabled=true;return;}
@@ -455,7 +485,7 @@ const panel=document.createElement('div');panel.className='card';panel.id='shema
 const importButton=document.createElement('button');importButton.type='button';importButton.className='btn secondary';importButton.textContent='Importar jornada antiga deste aparelho';panel.insertBefore(importButton,panel.lastElementChild);
 importButton.onclick=async()=>{if(!currentUser||!loadedUser)return;const raw=localStorage.getItem('shemaV8LegacyBackup');if(!raw){setStatus('Nenhuma jornada antiga foi encontrada neste aparelho.');return;}if(!confirm('Importar o progresso antigo para esta conta? Isso substituirá o progresso atual desta conta e o próximo salvamento atualizará a nuvem.'))return;try{const legacy=JSON.parse(raw);archiveCurrent(currentUser.id);clearJourney();restore(legacy);setStatus('Jornada antiga importada neste aparelho. Toque em Salvar progresso na nuvem para confirmar o backup.');}catch(e){setStatus('Não foi possível importar: '+errText(e));}};
 
-document.getElementById('shemaSyncNow').onclick=()=>push();document.getElementById('shemaSyncRestore').onclick=async()=>{if(!confirm('Substituir o progresso deste aparelho pelo progresso salvo na nuvem?'))return;try{const cloud=await pull();if(!cloud){setStatus('Ainda não há progresso salvo na nuvem.');return;}restore(cloud);setStatus('✓ Progresso recuperado.');}catch(e){setStatus(errText(e));}};
+document.getElementById('shemaSyncNow').onclick=()=>push();document.getElementById('shemaSyncRestore').onclick=async()=>{if(!confirm('Substituir o progresso deste aparelho pelo progresso salvo na nuvem?'))return;try{const cloud=await pull();if(!cloud){setStatus('Ainda não há progresso salvo na nuvem.');return;}restore(cloud);shemaRecordDailyVisit();setStatus('✓ Progresso recuperado.');}catch(e){setStatus(errText(e));}};
 // Observe mudanças de progresso sem alterar o funcionamento das missões existentes.
 const originalSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){const result=originalSet.apply(this,arguments);if(!suppressSync&&this===localStorage&&(PROGRESS_KEYS.includes(k)||/^shemaNote\d+$/.test(k)))queuePush();return result;};
 for(const fn of ['addXP','save','saveProfile','saveProgress','phFinish','advanceHouse','step','finishFour']){const orig=window[fn];if(typeof orig==='function')window[fn]=function(){const r=orig.apply(this,arguments);queuePush();return r;};}
