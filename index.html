@@ -482,6 +482,40 @@ if(!window.supabase?.createClient){message('Serviço de login indisponível. Con
 client=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const logout=document.createElement('button');logout.id='shemaLogout';logout.type='button';logout.textContent='Sair';logout.onclick=async()=>{try{clearTimeout(syncTimer);loadedUser=null;sessionEpoch++;await client.auth.signOut();location.reload();}catch(e){setStatus(errText(e));}};document.querySelector('.head').appendChild(logout);
 const panel=document.createElement('div');panel.className='card';panel.id='shemaSyncPanel';panel.innerHTML='<h2>☁️ Minha jornada na nuvem</h2><p id="shemaSyncStatus" class="muted">Aguardando autenticação…</p><button class="btn secondary" id="shemaSyncNow" type="button">Salvar progresso na nuvem</button><button class="btn secondary" id="shemaSyncRestore" type="button">Recuperar progresso da nuvem</button><p class="muted">A Bíblia baixada para uso offline permanece neste aparelho. Não é enviada para a nuvem.</p>';document.getElementById('profile').appendChild(panel);
+// Reiniciar jornada: só a conta autenticada; duas confirmações; salvar na nuvem antes de limpar localmente.
+const resetButton=document.createElement('button');
+resetButton.type='button';resetButton.className='btn secondary';
+resetButton.id='shemaResetJourney';resetButton.textContent='Reiniciar jornada';
+panel.appendChild(resetButton);
+resetButton.onclick=async()=>{
+  if(!currentUser||loadedUser!==currentUser.id){setStatus('Entre na sua conta para reiniciar.');return;}
+  const owner=currentUser.id;
+  if(!confirm('Reiniciar a jornada desta conta? XP, missões, casas, notas e sequência serão apagados. Sua conta e as demais contas não serão afetadas.'))return;
+  const phrase=prompt('Confirmação final: digite REINICIAR para apagar o progresso desta conta.');
+  if(phrase!=='REINICIAR'){setStatus('Reinício cancelado. Nenhum dado foi apagado.');return;}
+  if(syncing){setStatus('Aguarde a sincronização terminar e tente novamente.');return;}
+  resetButton.disabled=true;
+  clearTimeout(syncTimer);
+  const epoch=sessionEpoch;
+  const values={shemaXP:'0',shemaSteps:'[false,false,false,false]',shemaPlayable:'[]',shemaHouse:'1',shemaStreakCount:'0',shemaStreakLastDate:shemaBrazilDate()};
+  const fresh={schema:1,saved_at:new Date().toISOString(),values};
+  setStatus('Reiniciando a jornada na nuvem…');
+  try{
+    const {error}=await client.from('user_progress').upsert({user_id:owner,progress_data:fresh},{onConflict:'user_id'});
+    if(error)throw error;
+    if(epoch!==sessionEpoch||currentUser?.id!==owner||loadedUser!==owner)return;
+    clearJourney();
+    const old=suppressSync;suppressSync=true;
+    try{for(const [k,v] of Object.entries(values))localStorage.setItem(k,v);refreshUI();}
+    finally{suppressSync=old;}
+    localStorage.removeItem('shemaV8AccountBackup:'+owner);
+    setStatus('✓ Jornada reiniciada e salva na nuvem.');
+    alert('Jornada reiniciada. Você pode começar novamente!');
+  }catch(e){
+    if(epoch===sessionEpoch&&currentUser?.id===owner)setStatus('Falha ao reiniciar; progresso local preservado: '+errText(e));
+  }finally{resetButton.disabled=false;}
+};
+
 const importButton=document.createElement('button');importButton.type='button';importButton.className='btn secondary';importButton.textContent='Importar jornada antiga deste aparelho';panel.insertBefore(importButton,panel.lastElementChild);
 importButton.onclick=async()=>{if(!currentUser||!loadedUser)return;const raw=localStorage.getItem('shemaV8LegacyBackup');if(!raw){setStatus('Nenhuma jornada antiga foi encontrada neste aparelho.');return;}if(!confirm('Importar o progresso antigo para esta conta? Isso substituirá o progresso atual desta conta e o próximo salvamento atualizará a nuvem.'))return;try{const legacy=JSON.parse(raw);archiveCurrent(currentUser.id);clearJourney();restore(legacy);setStatus('Jornada antiga importada neste aparelho. Toque em Salvar progresso na nuvem para confirmar o backup.');}catch(e){setStatus('Não foi possível importar: '+errText(e));}};
 
