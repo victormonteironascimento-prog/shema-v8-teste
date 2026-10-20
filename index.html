@@ -421,6 +421,7 @@ const email=document.getElementById('authEmail'),password=document.getElementByI
 const submit=document.getElementById('authSubmit'),sw=document.getElementById('authSwitch'),forgot=document.getElementById('authForgot');
 const emailGroup=document.getElementById('authEmailGroup'),pwGroup=document.getElementById('authPasswordGroup');
 let mode='login',client=null,currentUser=null,syncTimer=null,syncing=false,loadedUser=null,localOwner=null,suppressSync=false,sessionEpoch=0;
+let shemaSyncRevision=0, shemaSyncedRevision=0, shemaSyncPromise=null;
 const PROGRESS_KEYS=['shemaXP','shemaSteps','shemaAvatar','shemaName','shemaPlayable','shemaHouse','shemaTask4Done','shemaStreakCount','shemaStreakLastDate'];
 const NOTE_PREFIX='shemaNote';
 if(app)app.inert=true;
@@ -466,8 +467,39 @@ function restoreAccountBackup(uid){try{const d=JSON.parse(localStorage.getItem('
 function refreshAccountProfile(){const level=Math.floor(Math.max(0,xp)/175)+1;const profileLevel=document.getElementById('profileLevel');if(profileLevel)profileLevel.textContent='Nível '+level+' · O Chamado';const apprentice=document.getElementById('shemaApprentice');if(apprentice)apprentice.hidden=xp<175;}
 function refreshUI(){try{xp=Number(localStorage.getItem('shemaXP')??0);steps=JSON.parse(localStorage.getItem('shemaSteps')||'[false,false,false,false]');avatar=localStorage.getItem('shemaAvatar')||'🧭';document.getElementById('profileName').textContent=localStorage.getItem('shemaName')||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';update();phMapUpdate();restoreProgress();refreshAccountProfile();shemaRenderStreak();}catch(e){console.warn('Shema: atualização da interface',e);}}
 async function pull(){const {data,error}=await client.from('user_progress').select('progress_data').eq('user_id',currentUser.id).maybeSingle();if(error)throw error;return data&&data.progress_data||null;}
-async function push(){if(!currentUser||syncing||suppressSync||loadedUser!==currentUser.id)return;const owner=currentUser.id,epoch=sessionEpoch,payload=capture();syncing=true;setStatus('Salvando progresso na nuvem…');try{const {error}=await client.from('user_progress').upsert({user_id:owner,progress_data:payload},{onConflict:'user_id'});if(error)throw error;if(epoch===sessionEpoch&&currentUser?.id===owner)setStatus('✓ Progresso salvo na nuvem · '+new Date().toLocaleTimeString('pt-BR'));}catch(e){if(epoch===sessionEpoch)setStatus('Não foi possível sincronizar: '+errText(e));}finally{syncing=false;}}
-function queuePush(){if(suppressSync||!currentUser||loadedUser!==currentUser.id)return;clearTimeout(syncTimer);const epoch=sessionEpoch;syncTimer=setTimeout(()=>{if(epoch===sessionEpoch)push();},1300);}
+async function push(){
+  if(!currentUser||suppressSync||loadedUser!==currentUser.id)return false;
+  if(syncing){return shemaSyncPromise||false;}
+  const owner=currentUser.id,epoch=sessionEpoch;
+  syncing=true;
+  shemaSyncPromise=(async()=>{
+    let success=true;
+    try{
+      do{
+        const revision=shemaSyncRevision;
+        const payload=capture();
+        setStatus('Salvando progresso na nuvem…');
+        const {error}=await client.from('user_progress').upsert({user_id:owner,progress_data:payload},{onConflict:'user_id'});
+        if(error)throw error;
+        if(epoch!==sessionEpoch||currentUser?.id!==owner||loadedUser!==owner)return false;
+        shemaSyncedRevision=revision;
+      }while(shemaSyncRevision!==shemaSyncedRevision);
+      setStatus('✓ Progresso salvo na nuvem · '+new Date().toLocaleTimeString('pt-BR'));
+    }catch(e){
+      success=false;
+      if(epoch===sessionEpoch&&currentUser?.id===owner)setStatus('Não foi possível sincronizar: '+errText(e));
+    }finally{syncing=false;shemaSyncPromise=null;}
+    return success;
+  })();
+  return shemaSyncPromise;
+}
+function queuePush(){
+  if(suppressSync||!currentUser||loadedUser!==currentUser.id)return;
+  shemaSyncRevision++;
+  clearTimeout(syncTimer);
+  const epoch=sessionEpoch;
+  if(!syncing)syncTimer=setTimeout(()=>{if(epoch===sessionEpoch)push();},1300);
+}
 function showApp(yes){box.hidden=!!yes;if(app)app.inert=!yes;document.getElementById('shemaLogout').style.display=yes?'inline-block':'none';}
 async function initialize(session){const user=session&&session.user;if(!user){sessionEpoch++;clearTimeout(syncTimer);currentUser=null;loadedUser=null;showApp(false);return;}if(loadedUser===user.id){showApp(true);shemaRecordDailyVisit();return;}sessionEpoch++;clearTimeout(syncTimer);const epoch=sessionEpoch;const previousOwner=localStorage.getItem('shemaV8LocalOwner');currentUser=user;loadedUser=null;showApp(false);message('Carregando sua jornada…');try{const cloud=await pull();if(epoch!==sessionEpoch||currentUser?.id!==user.id)return;
 if(previousOwner!==user.id){archiveCurrent(previousOwner);clearJourney();}
@@ -496,6 +528,7 @@ resetButton.onclick=async()=>{
   if(syncing){setStatus('Aguarde a sincronização terminar e tente novamente.');return;}
   resetButton.disabled=true;
   clearTimeout(syncTimer);
+  shemaSyncRevision=shemaSyncedRevision;
   const epoch=sessionEpoch;
   const values={shemaXP:'0',shemaSteps:'[false,false,false,false]',shemaPlayable:'[]',shemaHouse:'1',shemaStreakCount:'0',shemaStreakLastDate:shemaBrazilDate()};
   const fresh={schema:1,saved_at:new Date().toISOString(),values};
@@ -508,6 +541,7 @@ resetButton.onclick=async()=>{
     const old=suppressSync;suppressSync=true;
     try{for(const [k,v] of Object.entries(values))localStorage.setItem(k,v);refreshUI();}
     finally{suppressSync=old;}
+    shemaSyncRevision=shemaSyncedRevision;
     localStorage.removeItem('shemaV8AccountBackup:'+owner);
     setStatus('✓ Jornada reiniciada e salva na nuvem.');
     alert('Jornada reiniciada. Você pode começar novamente!');
