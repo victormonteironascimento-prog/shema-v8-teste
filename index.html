@@ -58,7 +58,7 @@ main{max-width:780px;margin:auto;padding:18px}.screen{display:none}.screen.activ
 <section id="map" class="screen"><div class="ey">Jornada bíblica · regiões progressivas</div><h1>O Caminho da Palavra</h1><p>Avance casa por casa por toda a história bíblica, da criação à nova criação.</p><div class="card"><label>Explorar uma região<select id="mapRegionFilter" onchange="phMapRender();phMapUpdate()" style="width:100%;padding:12px;border-radius:12px;border:1px solid #443527;background:#11100d;color:var(--txt);margin-top:8px"><option value="all">Todas as regiões (83 casas)</option></select></label></div><div class="card"><div class="row"><b>Progresso da jornada</b><b class="xp" id="mapProgress">3 / 83</b></div><div class="bar" style="margin-top:10px"><i style="width:3.6%"></i></div><p class="muted" id="regionProgress" style="margin-bottom:0">Região atual: O Chamado</p></div><div class="card map"><div class="path"></div>
 <div id="mapNodes"></div></div></section>
 
-<section id="achievements" class="screen"><div class="ey">Marcos</div><h1>Conquistas</h1><p>Recompensas que reconhecem constância, não competição.</p><div class="card"><span class="badge">🌱 Primeiros passos</span><span class="badge">🔥 Fogo aceso</span><span class="badge">📖 Amante da Palavra</span><span class="badge">🛡️ Perseverante</span><span class="badge">✝️ Seguindo o Mestre</span></div><div class="card"><h2>Próximas conquistas</h2><div class="quest"><div class="ico">🔥</div><div><b>Fogo Aceso</b><div class="muted">Complete 7 dias seguidos</div></div><span class="xp">4/7</span></div><div class="quest"><div class="ico">📚</div><div><b>Amante da Palavra</b><div class="muted">Complete 100 porções</div></div><span class="xp">18/100</span></div><div class="quest"><div class="ico">🏔️</div><div><b>Até o Fim</b><div class="muted">Conclua a jornada anual</div></div><span class="xp">12%</span></div></div></section>
+<section id="achievements" class="screen"><div class="ey">Marcos</div><h1>Conquistas</h1><p>Recompensas que reconhecem constância, não competição.</p><div class="card"><h2>Conquistas alcançadas</h2><div id="shemaEarnedBadges" class="muted">Suas conquistas aparecerão aqui conforme você avançar.</div></div><div class="card"><h2>Seu progresso real</h2><div class="quest"><div class="ico">🔥</div><div><b>Fogo Aceso</b><div class="muted">Complete 7 dias seguidos</div></div><span class="xp" id="shemaAchievementStreak">0/7</span></div><div class="quest"><div class="ico">📚</div><div><b>Explorador da Palavra</b><div class="muted">Conclua 10 casas da jornada</div></div><span class="xp" id="shemaAchievementHouses">0/10</span></div><div class="quest"><div class="ico">🏔️</div><div><b>Até o Fim</b><div class="muted">Conclua as 83 casas da jornada</div></div><span class="xp" id="shemaAchievementJourney">0/83</span></div></div></section>
 
 <section id="profile" class="screen"><div class="ey">Seu personagem</div><h1>Perfil</h1><div class="card hero"><div class="row"><div class="row" style="justify-content:flex-start"><div class="avatar" id="profileAvatar">🧭</div><div><h2 style="margin:0" id="profileName">Peregrino</h2><div class="muted" id="profileLevel">Nível 1 · O Chamado</div></div></div><button class="btn small secondary" onclick="openModal()">Editar</button></div></div>
 <div class="card"><h2>Atributos</h2><p class="muted">Os atributos personalizados ainda não são calculados nesta versão. Os valores antigos eram demonstrativos e não representavam a conta conectada.</p></div>
@@ -388,7 +388,7 @@ function phMapRender(){
   html+='<div class="node locked" id="mapHouse'+n+'" onclick="phOpen('+n+')" role="button" tabindex="0"><div class="nodebox"><b>'+n+'. '+d[0]+'</b><small>'+d[1]+'</small></div><div class="circle">'+n+'</div></div>';
  });host.innerHTML=html;phRenderLibrary();
 }
-function phMapUpdate(){let p=phProgress(),un=phUnlocked();for(let i=1;i<=PH.length;i++){let e=document.getElementById('mapHouse'+i);if(e){e.classList.remove('done','current','locked');if(p[i-1])e.classList.add('done');else if(i<=un)e.classList.add('current');else e.classList.add('locked');let c=e.querySelector('.circle');if(c)c.textContent=p[i-1]?'✓':String(i)}}let done=p.filter(Boolean).length,x=document.getElementById('mapProgress');if(x)x.textContent=done+' / '+PH.length;let bar=document.querySelector('#map .bar i');if(bar)bar.style.width=(done/PH.length*100)+'%';let r=REGION_INFO.find(z=>un>=z.start&&un<=z.end)||REGION_INFO[REGION_INFO.length-1],rp=document.getElementById('regionProgress');if(rp)rp.textContent='Região atual: '+r.title+' · casas '+r.start+'–'+r.end;}
+function phMapUpdate(){let p=phProgress(),un=phUnlocked();for(let i=1;i<=PH.length;i++){let e=document.getElementById('mapHouse'+i);if(e){e.classList.remove('done','current','locked');if(p[i-1])e.classList.add('done');else if(i<=un)e.classList.add('current');else e.classList.add('locked');let c=e.querySelector('.circle');if(c)c.textContent=p[i-1]?'✓':String(i)}}let done=p.filter(Boolean).length,x=document.getElementById('mapProgress');if(x)x.textContent=done+' / '+PH.length;let bar=document.querySelector('#map .bar i');if(bar)bar.style.width=(done/PH.length*100)+'%';let r=REGION_INFO.find(z=>un>=z.start&&un<=z.end)||REGION_INFO[REGION_INFO.length-1],rp=document.getElementById('regionProgress');if(rp)rp.textContent='Região atual: '+r.title+' · casas '+r.start+'–'+r.end;if(typeof shemaRenderAchievements==='function')shemaRenderAchievements();}
 
 function phRead(){window.shemaReadingFromMission='playhouse';let d=PH[phN-1],bookIndex=bibleBooks.findIndex(x=>x[1]===d[10]);go('bible');let b=document.getElementById('bibleBook');if(b&&bookIndex>=0){b.value=String(bookIndex);if(typeof updateBibleChapters==='function')updateBibleChapters();let c=document.getElementById('bibleChapter');if(c)c.value=String(d[11]);if(typeof loadBibleChapter==='function')loadBibleChapter()}}
 </script>
@@ -441,10 +441,27 @@ function shemaPreviousDate(day){
   d.setUTCDate(d.getUTCDate()-1);
   return d.toISOString().slice(0,10);
 }
+function shemaRenderAchievements(){
+  const streak=Math.max(0,Number(localStorage.getItem('shemaStreakCount'))||0);
+  const completed=typeof phProgress==='function'?phProgress().filter(Boolean).length:0;
+  const total=typeof PH!=='undefined'?PH.length:83;
+  const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+  set('shemaAchievementStreak',Math.min(streak,7)+'/7');
+  set('shemaAchievementHouses',Math.min(completed,10)+'/10');
+  set('shemaAchievementJourney',completed+'/'+total+' · '+Math.round(completed/total*100)+'%');
+  const earned=[];
+  if(completed>=1)earned.push('🌱 Primeiros passos');
+  if(streak>=7)earned.push('🔥 Fogo Aceso');
+  if(completed>=10)earned.push('📚 Explorador da Palavra');
+  if(completed>=total)earned.push('🏔️ Até o Fim');
+  const el=document.getElementById('shemaEarnedBadges');
+  if(el){el.replaceChildren();if(!earned.length){el.textContent='Continue sua jornada para conquistar seu primeiro marco.';}else for(const name of earned){const span=document.createElement('span');span.className='badge';span.textContent=name;el.appendChild(span);}}
+}
 function shemaRenderStreak(){
   const el=document.getElementById('shemaStreak');if(!el)return;
   const count=Math.max(0,Number(localStorage.getItem('shemaStreakCount'))||0);
   el.textContent='🔥 '+count+' '+(count===1?'dia':'dias');
+  shemaRenderAchievements();
 }
 function shemaRecordDailyVisit(){
   if(!currentUser||loadedUser!==currentUser.id)return;
@@ -465,7 +482,7 @@ function clearJourney(){const old=suppressSync;suppressSync=true;try{for(const k
 function archiveCurrent(owner){if(owner){localStorage.setItem('shemaV8AccountBackup:'+owner,JSON.stringify(capture()));}else if(!localStorage.getItem('shemaV8LegacyBackup')){localStorage.setItem('shemaV8LegacyBackup',JSON.stringify(capture()));}}
 function restoreAccountBackup(uid){try{const d=JSON.parse(localStorage.getItem('shemaV8AccountBackup:'+uid)||'null');if(d){clearJourney();restore(d);return true;}}catch(e){console.warn(e);}return false;}
 function refreshAccountProfile(){const level=Math.floor(Math.max(0,xp)/175)+1;const profileLevel=document.getElementById('profileLevel');if(profileLevel)profileLevel.textContent='Nível '+level+' · O Chamado';const apprentice=document.getElementById('shemaApprentice');if(apprentice)apprentice.hidden=xp<175;}
-function refreshUI(){try{xp=Number(localStorage.getItem('shemaXP')??0);steps=JSON.parse(localStorage.getItem('shemaSteps')||'[false,false,false,false]');avatar=localStorage.getItem('shemaAvatar')||'🧭';document.getElementById('profileName').textContent=localStorage.getItem('shemaName')||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';update();phMapUpdate();restoreProgress();refreshAccountProfile();shemaRenderStreak();}catch(e){console.warn('Shema: atualização da interface',e);}}
+function refreshUI(){try{xp=Number(localStorage.getItem('shemaXP')??0);steps=JSON.parse(localStorage.getItem('shemaSteps')||'[false,false,false,false]');avatar=localStorage.getItem('shemaAvatar')||'🧭';document.getElementById('profileName').textContent=localStorage.getItem('shemaName')||'Peregrino';document.getElementById('profileAvatar').textContent=avatar;document.getElementById('avatarHome').textContent=avatar;document.getElementById('xp').textContent=xp;document.getElementById('level').textContent=Math.floor(xp/175)+1;document.getElementById('xpbar').style.width=((xp%175)/175*100)+'%';update();phMapUpdate();restoreProgress();refreshAccountProfile();shemaRenderStreak();shemaRenderAchievements();}catch(e){console.warn('Shema: atualização da interface',e);}}
 async function pull(){const {data,error}=await client.from('user_progress').select('progress_data').eq('user_id',currentUser.id).maybeSingle();if(error)throw error;return data&&data.progress_data||null;}
 async function push(){
   if(!currentUser||suppressSync||loadedUser!==currentUser.id)return false;
